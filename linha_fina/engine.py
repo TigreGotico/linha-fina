@@ -15,10 +15,13 @@ class IntentMatch:
 
 
 class IntentEngine:
-    def __init__(self):
-        self.clf = DynamicClassifier()
+    def __init__(self, instant_train=False):
+        self.clf = DynamicClassifier(instant_train=instant_train)
         self.t_matchers: Dict[str, TemplateMatcher] = defaultdict(TemplateMatcher)
         self.k_matchers: Dict[str, KeywordFeatures] = defaultdict(KeywordFeatures)
+
+    def train(self):
+        self.clf.train()
 
     def register_intent(self, name: str,
                         samples: List[str],

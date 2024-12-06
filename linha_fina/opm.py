@@ -71,11 +71,17 @@ class LinhaFinaPipeline(ConfidenceMatcherPipeline):
         self.bus.on('padatious:register_entity', self.register_entity)
         self.bus.on('detach_intent', self.handle_detach_intent)
         self.bus.on('detach_skill', self.handle_detach_skill)
+        self.bus.on('mycroft.ready', self.handle_initial_train)
 
         self.registered_intents = []
         self.registered_entities = []
         self.max_words = 50  # if an utterance contains more words than this, don't attempt to match
         LOG.debug('Loaded LinhaFina intent parser.')
+
+    def handle_initial_train(self, message: Message):
+        # otherwise training happens on first inference
+        for lang in self.containers:
+            self.containers[lang].train()
 
     def _match_level(self, utterances, limit, lang=None,
                      message: Optional[Message] = None) -> Optional[IntentHandlerMatch]:
@@ -249,7 +255,6 @@ class LinhaFinaPipeline(ConfidenceMatcherPipeline):
         intents = [_calc_lf_intent(utt, intent_container, sess)
                    for utt in utterances]
         intents = [i for i in intents if i is not None]
-        LOG.debug(f"LinhaFina Intents: {intents}")
         # select best
         if intents:
             return max(intents, key=lambda k: k.conf)
@@ -285,6 +290,7 @@ def _calc_lf_intent(utt: str, intent_container: IntentEngine, sess: Session) -> 
                    if i is not None
                    and i.name not in sess.blacklisted_intents
                    and i.name.split(":")[0] not in sess.blacklisted_skills]
+        LOG.debug(f"LinhaFina Intents: {intents}")
         if len(intents) == 0:
             return None
         best_conf = max(x.conf for x in intents)

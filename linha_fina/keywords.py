@@ -182,7 +182,7 @@ class KeywordFeatures:
             Iterable[Tuple[str, str]]: Iterable of matching entities and their values.
         """
         utt = utt.lower().strip(".!?,;:")
-        for k in self.entities:
+        for k in list(self.entities):
             matcher = self._automaton_match(utt, k) if self.use_automatons else self._voc_match(utt, k)
             for v in matcher:
                 yield k, v
