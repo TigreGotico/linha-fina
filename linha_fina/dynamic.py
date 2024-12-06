@@ -139,6 +139,10 @@ class DynamicClassifier:
         """
         self.clfs[name].add_positive(samples)
 
+    def remove_label(self, name: str):
+        if name in self.clfs:
+            self.clfs.pop(name)
+
     def train(self) -> None:
         """
         Trains all classifiers, ensuring each label has negative samples from other labels.

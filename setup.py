@@ -48,6 +48,8 @@ def package_files(directory):
     return paths
 
 
+PLUGIN_ENTRY_POINT = 'ovos-linha-fina-pipeline-plugin=linha_fina.opm:LinhaFinaPipeline'
+
 setup(
     name='linha-fina',
     version=get_version(),
@@ -58,5 +60,6 @@ setup(
     author='JarbasAI',
     author_email='jarbasai@mailfence.com',
     description='',
+    entry_points={'opm.pipeline': PLUGIN_ENTRY_POINT},
     install_requires=required('requirements.txt')
 )

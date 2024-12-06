@@ -41,6 +41,26 @@ class IntentEngine:
             for ent, e_samples in entity_samples.items():
                 self.k_matchers[name].register_entity(ent, e_samples)
 
+    def remove_intent(self, name: str):
+        self.clf.remove_label(name)
+
+        if name in self.k_matchers:
+            self.k_matchers.pop(name)
+
+        if name in self.t_matchers:
+            self.t_matchers.pop(name)
+
+    def register_entity(self, name: str, samples: List[str],
+                        intent_name: Optional[str] = None):
+        intents = [intent_name] if intent_name else list(self.k_matchers.keys())
+        for intent in intents:
+            self.k_matchers[intent].register_entity(name, samples)
+
+    def remove_entity(self, name: str, intent_name: Optional[str] = None):
+        intents = [intent_name] if intent_name else list(self.k_matchers.keys())
+        for intent in [i for i in intents if i in self.k_matchers]:
+            self.k_matchers[intent].deregister_entity(name)
+
     def calc_intent(self, query: str) -> IntentMatch:
         return self.predict(query, top_n=1)[0]
 
