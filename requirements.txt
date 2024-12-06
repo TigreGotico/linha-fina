@@ -1,5 +1,4 @@
 scikit-learn
 joblib
-pyahocorasick
 simplematch
 rapidfuzz

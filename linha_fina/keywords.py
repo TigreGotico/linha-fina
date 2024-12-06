@@ -1,13 +1,18 @@
-import ahocorasick
-import joblib
 import re
 from typing import Tuple, Iterable, Optional, List, Dict
+
+import joblib
+
+try:
+    import ahocorasick
+except ImportError:
+    ahocorasick = None
 
 
 class KeywordFeatures:
     def __init__(self, csv_path: Optional[str] = None,
                  ignore_list: Optional[List[str]] = None,
-                 use_automatons: bool = True):
+                 use_automatons: Optional[bool] = None):
         """
         Initialize the KeywordFeatures class.
 
@@ -16,8 +21,11 @@ class KeywordFeatures:
             ignore_list (Optional[List[str]]): List of words to ignore.
             use_automatons (bool): Whether to use Aho-Corasick automatons for matching.
         """
+        if ahocorasick is None and use_automatons:
+            raise ImportError("ERROR - pip install pyahocorasick")
+
         self.ignore_list = ignore_list or []
-        self.use_automatons = use_automatons
+        self.use_automatons: bool = use_automatons or False
         self.automatons: Dict[str, ahocorasick.Automaton] = {}
         self._needs_building: List[str] = []
         self.entities: Dict[str, List[str]] = {}
@@ -233,7 +241,6 @@ class KeywordFeatures:
 
 
 if __name__ == "__main__":
-
     kw = KeywordFeatures()
 
     # Register some example entities
