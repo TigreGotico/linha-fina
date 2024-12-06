@@ -138,6 +138,7 @@ class DynamicClassifier:
             samples (List[str]): A list of positive samples for the label.
         """
         self.clfs[name].add_positive(samples)
+        self._needs_training = True
 
     def remove_label(self, name: str):
         if name in self.clfs:

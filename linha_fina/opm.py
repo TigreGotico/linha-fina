@@ -249,6 +249,7 @@ class LinhaFinaPipeline(ConfidenceMatcherPipeline):
         intents = [_calc_lf_intent(utt, intent_container, sess)
                    for utt in utterances]
         intents = [i for i in intents if i is not None]
+        LOG.debug(f"LinhaFina Intents: {intents}")
         # select best
         if intents:
             return max(intents, key=lambda k: k.conf)
