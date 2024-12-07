@@ -62,8 +62,8 @@ class LinhaFinaPipeline(ConfidenceMatcherPipeline):
             langs.append(self.lang)
         langs = [standardize_lang_tag(l) for l in langs]
         self.conf_high = self.config.get("conf_high") or 0.95
-        self.conf_med = self.config.get("conf_med") or 0.8
-        self.conf_low = self.config.get("conf_low") or 0.5
+        self.conf_med = self.config.get("conf_med") or 0.6
+        self.conf_low = self.config.get("conf_low") or 0.3
 
         self.containers = {lang: IntentEngine() for lang in langs}
 

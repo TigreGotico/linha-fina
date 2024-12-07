@@ -45,7 +45,7 @@ class DynamicBinaryClassifier:
         """
         Initializes an MLPClassifier with appropriate architecture based on featurizer labels.
         """
-        self.model = model or SVC(probability=True, random_state=42)
+        self.model = model or MLPClassifier()  # SVC(probability=True, random_state=42)
         if not hasattr(self.model, "predict_proba"):
             self.model = CalibratedClassifierCV(self.model)
 
@@ -215,15 +215,15 @@ class DynamicClassifier:
 
     def eval_fp(self):
         # evaluate false positives, via all unified negative samples
-        clfs = dict(self.clfs)  # copy because it might change during iteration otherwise
-        if len(clfs) > 2:
-            for name, clf in clfs.items():
+        if len(self.clfs) > 2:
+            names = sorted(list(self.clfs))
+            for name in names:
+                clf = self.clfs[name]
                 if not clf.positives:
                     continue
                 negatives = []
-                for name2, other_clf in clfs.items():
-                    if name != name2:
-                        negatives += other_clf.positives
+                for name2 in [n for n in self.clfs if n != name]:
+                    negatives += self.clfs[name2].positives
                 data: TrainingData = []
                 # we don't have a training set for positives
                 # but we have a lot of unseen negatives
