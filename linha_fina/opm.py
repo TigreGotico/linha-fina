@@ -61,9 +61,9 @@ class LinhaFinaPipeline(ConfidenceMatcherPipeline):
         if self.lang not in langs:
             langs.append(self.lang)
         langs = [standardize_lang_tag(l) for l in langs]
-        self.conf_high = self.config.get("conf_high") or 0.95
+        self.conf_high = self.config.get("conf_high") or 0.8
         self.conf_med = self.config.get("conf_med") or 0.6
-        self.conf_low = self.config.get("conf_low") or 0.3
+        self.conf_low = self.config.get("conf_low") or 0.4
 
         self.containers = {lang: IntentEngine() for lang in langs}
 
@@ -288,6 +288,7 @@ def _calc_lf_intent(utt: str, intent_container: IntentEngine, sess: Session) -> 
     try:
         intents = [i for i in intent_container.predict(utt)
                    if i is not None
+                   and i.conf >= 0.2
                    and i.name not in sess.blacklisted_intents
                    and i.name.split(":")[0] not in sess.blacklisted_skills]
         LOG.debug(f"LinhaFina Intents: {intents}")
