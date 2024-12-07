@@ -3,13 +3,22 @@
 A IntentEngine that dynamically accounts for changing reference data at runtime. Add/remove intents dynamically
 
 How it works:
+
 - each intent is an independent SVM that classifies intent vs not-intent
 - each intent uses the other intents data as "not-intent" training data
+- only most relevant negative samples are used for training (calculated via [token_set_ratio](https://rapidfuzz.github.io/RapidFuzz/Usage/fuzz.html#token-set-ratio))
+- features are just [one-hot-encoded](https://en.wikipedia.org/wiki/One-hot) keyword vectors
 - entity extraction from templates via [simplematch](https://github.com/tfeldmann/simplematch)
 - entity extraction based on wordlists, optionally via [aho-corasick](https://en.wikipedia.org/wiki/Aho%E2%80%93Corasick_algorithm)
 
-![img.png](img.png)
 
+Limitations:
+- long warm up time (training happens on first inference)
+- doesn't scale well to a large number of intents
+- does not take word position into account
+- needs retraining whenever a new intent is added
+
+![img.png](img.png)
 
 ## Usage
 
@@ -31,10 +40,9 @@ engine.register_intent("hello", intent_1)
 engine.register_intent("joke", intent_2)
 engine.register_intent("weather", intent_3)
 engine.register_intent("introduce", intent_4)
-engine.register_intent("change_color", intent_5,  entity_samples={"color": ["red", "blue"]})
+engine.register_intent("change_color", intent_5, entity_samples={"color": ["red", "blue"]})
 # you can register more entity examples after intent creation
 engine.register_entity("color", ["yellow", "green"], intent_name="color")
-
 
 for s in ["hello earth",
           "call me Casimiro",
