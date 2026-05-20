@@ -188,7 +188,7 @@ class DynamicClassifier:
         """
         with self.lock:
             clfs = dict(self.clfs)  # Copy because it might change during iteration
-            if len(clfs) > 2:
+            if len(clfs) >= 2:
                 def train_single_label(name: str):
                     # Add negative samples for the classifier
                     for name2, other_clf in clfs.items():

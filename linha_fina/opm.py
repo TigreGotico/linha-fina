@@ -65,7 +65,7 @@ class LinhaFinaPipeline(ConfidenceMatcherPipeline):
         self.conf_med = self.config.get("conf_med") or 0.6
         self.conf_low = self.config.get("conf_low") or 0.4
 
-        self.containers = {lang: IntentEngine() for lang in langs}
+        self.containers = {lang: self._make_engine() for lang in langs}
 
         self.bus.on('padatious:register_intent', self.register_intent)
         self.bus.on('padatious:register_entity', self.register_entity)
@@ -77,6 +77,38 @@ class LinhaFinaPipeline(ConfidenceMatcherPipeline):
         self.registered_entities = []
         self.max_words = 50  # if an utterance contains more words than this, don't attempt to match
         LOG.debug('Loaded LinhaFina intent parser.')
+
+    # ── hooks (override in subclasses) ────────────────────────────────────
+    def _make_engine(self):
+        """Build the per-language intent engine. Override to swap engines."""
+        return IntentEngine()
+
+    def _add_intent(self, lang: str, name: str, samples: List[str]) -> None:
+        """Register an intent into the engine for *lang*."""
+        self.containers[lang].register_intent(name, samples)
+
+    def _add_entity(self, lang: str, name: str, samples: List[str]) -> None:
+        """Register an entity into the engine for *lang*."""
+        self.containers[lang].register_entity(name, samples)
+
+    def _remove_intent(self, intent_name: str) -> None:
+        """Remove an intent from every per-language engine."""
+        for lang in self.containers:
+            self.containers[lang].remove_intent(intent_name)
+
+    def _remove_entity(self, name: str, lang: str) -> None:
+        if lang in self.containers:
+            self.containers[lang].remove_entity(name)
+
+    def _remove_skill(self, skill_id: str) -> None:
+        """Remove every intent/entity belonging to *skill_id*."""
+        remove_list = [i for i in self.registered_intents if skill_id in i]
+        for i in remove_list:
+            self._detach_intent(i)
+        skill_id_colon = skill_id + ":"
+        for en in self.registered_entities:
+            if en["name"].startswith(skill_id_colon):
+                self._remove_entity(en["name"], en["lang"])
 
     def handle_initial_train(self, message: Message):
         # otherwise training happens on first inference
@@ -131,52 +163,26 @@ class LinhaFinaPipeline(ConfidenceMatcherPipeline):
         """
         return self._match_level(utterances, self.conf_low, lang, message)
 
-    def __detach_intent(self, intent_name):
-        """ Remove an intent if it has been registered.
-
-        Args:
-            intent_name (str): intent identifier
-        """
+    def _detach_intent(self, intent_name):
+        """ Remove an intent if it has been registered."""
         if intent_name in self.registered_intents:
             self.registered_intents.remove(intent_name)
-            for lang in self.containers:
-                self.containers[lang].remove_intent(intent_name)
+            self._remove_intent(intent_name)
+
+    # back-compat alias
+    __detach_intent = _detach_intent
 
     def handle_detach_intent(self, message):
-        """Messagebus handler for detaching LinhaFina intent.
-
-        Args:
-            message (Message): message triggering action
-        """
-        self.__detach_intent(message.data.get('intent_name'))
-
-    def __detach_entity(self, name, lang):
-        """ Remove an entity.
-
-        Args:
-            entity name
-            entity lang
-        """
-        if lang in self.containers:
-            self.containers[lang].remove_entity(name)
+        """Messagebus handler for detaching LinhaFina intent."""
+        self._detach_intent(message.data.get('intent_name'))
 
     def handle_detach_skill(self, message):
-        """Messagebus handler for detaching all intents for skill.
-
-        Args:
-            message (Message): message triggering action
-        """
+        """Messagebus handler for detaching all intents for skill."""
         skill_id = message.data['skill_id']
-        remove_list = [i for i in self.registered_intents if skill_id in i]
-        for i in remove_list:
-            self.__detach_intent(i)
-        skill_id_colon = skill_id + ":"
-        for en in self.registered_entities:
-            if en["name"].startswith(skill_id_colon):
-                self.__detach_entity(en["name"], en["lang"])
+        self._remove_skill(skill_id)
 
     @staticmethod
-    def _register_object(message, object_name, register_func):
+    def _extract_samples(message, object_name):
         """Generic method for registering a LinhaFina object.
 
         Args:
@@ -191,40 +197,36 @@ class LinhaFinaPipeline(ConfidenceMatcherPipeline):
         LOG.debug('Registering LinhaFina ' + object_name + ': ' + name)
 
         if (not file_name or not isfile(file_name)) and not samples:
-            LOG.error('Could not find file ' + file_name)
-            return
+            LOG.error('Could not find file ' + str(file_name))
+            return None, None
 
         if not samples and isfile(file_name):
             with open(file_name) as f:
                 samples = [line.strip() for line in f.readlines()]
 
-        register_func(name, samples)
+        return name, samples
 
     def register_intent(self, message):
-        """Messagebus handler for registering intents.
-
-        Args:
-            message (Message): message triggering action
-        """
+        """Messagebus handler for registering intents."""
         lang = message.data.get('lang', self.lang)
         lang = standardize_lang_tag(lang)
         if lang in self.containers:
+            name, samples = self._extract_samples(message, 'intent')
+            if name is None:
+                return
             self.registered_intents.append(message.data['name'])
-            self._register_object(message, 'intent',
-                                  self.containers[lang].register_intent)
+            self._add_intent(lang, name, samples)
 
     def register_entity(self, message):
-        """Messagebus handler for registering entities.
-
-        Args:
-            message (Message): message triggering action
-        """
+        """Messagebus handler for registering entities."""
         lang = message.data.get('lang', self.lang)
         lang = standardize_lang_tag(lang)
         if lang in self.containers:
+            name, samples = self._extract_samples(message, 'entity')
+            if name is None:
+                return
             self.registered_entities.append(message.data)
-            self._register_object(message, 'entity',
-                                  self.containers[lang].register_entity)
+            self._add_entity(lang, name, samples)
 
     def calc_intent(self, utterances: List[str], lang: str = None,
                     message: Optional[Message] = None) -> Optional[LinhaFinaIntent]:
