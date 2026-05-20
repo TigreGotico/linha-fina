@@ -1,10 +1,34 @@
 import dataclasses
+import re
 from collections import defaultdict
 from typing import List, Optional, Dict
 
+from linha_fina._bracket_expansion import expand_template
 from linha_fina.dynamic import DynamicClassifier
 from linha_fina.keywords import KeywordFeatures
 from linha_fina.templates import TemplateMatcher
+
+_WS_RE = re.compile(r"\s+")
+
+
+def _expand_samples(samples: List[str]) -> List[str]:
+    """Expand OVOS ``(a|b)``/``[opt]`` syntax in ``samples``.
+
+    ``{slot}`` placeholders are preserved so template/keyword matchers
+    can still extract entities. Duplicates are removed while preserving
+    insertion order; collapsed whitespace from removed optionals is
+    normalised.
+    """
+    out: List[str] = []
+    seen: set = set()
+    for s in samples:
+        variants = expand_template(s) if ("(" in s or "[" in s) else [s]
+        for v in variants:
+            v = _WS_RE.sub(" ", v).strip()
+            if v and v not in seen:
+                seen.add(v)
+                out.append(v)
+    return out
 
 
 @dataclasses.dataclass
@@ -26,7 +50,9 @@ class IntentEngine:
     def register_intent(self, name: str,
                         samples: List[str],
                         entity_samples: Optional[Dict[str, List[str]]] = None):
-        samples = samples or []
+        # Expand OVOS ``(a|b)`` alternatives and ``[opt]`` optionals.
+        # ``{slot}`` placeholders are preserved for the template matcher.
+        samples = _expand_samples(samples or [])
         templates = [s for s in samples if "{" in s and "}" in s]
         entity_samples = entity_samples or {}
         extra_samples = []  # generated from entity + template combos
