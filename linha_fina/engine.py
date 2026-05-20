@@ -15,20 +15,17 @@ def _expand_samples(samples: List[str]) -> List[str]:
     """Expand OVOS ``(a|b)``/``[opt]`` syntax in ``samples``.
 
     ``{slot}`` placeholders are preserved so template/keyword matchers
-    can still extract entities. Duplicates are removed while preserving
-    insertion order; collapsed whitespace from removed optionals is
-    normalised.
+    can still extract entities. Duplicates are removed and collapsed
+    whitespace from removed optionals is normalised.
     """
-    out: List[str] = []
-    seen: set = set()
+    out: set = set()
     for s in samples:
         variants = expand_template(s) if ("(" in s or "[" in s) else [s]
         for v in variants:
             v = _WS_RE.sub(" ", v).strip()
-            if v and v not in seen:
-                seen.add(v)
-                out.append(v)
-    return out
+            if v:
+                out.add(v)
+    return list(out)
 
 
 @dataclasses.dataclass
