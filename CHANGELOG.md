@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.0a1](https://github.com/TigreGotico/linha-fina/tree/0.1.0a1) (2026-05-20)
+
+[Full Changelog](https://github.com/TigreGotico/linha-fina/compare/0.0.1a3...0.1.0a1)
+
+**Merged pull requests:**
+
+- feat: add DomainIntentEngine and DomainLinhaFinaPipeline [\#3](https://github.com/TigreGotico/linha-fina/pull/3) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.0.1a3](https://github.com/TigreGotico/linha-fina/tree/0.0.1a3) (2026-05-20)
 
 [Full Changelog](https://github.com/TigreGotico/linha-fina/compare/0.0.1a2...0.0.1a3)
