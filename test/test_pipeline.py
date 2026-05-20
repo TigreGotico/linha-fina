@@ -1,10 +1,12 @@
 """OPM pipeline tests for LinhaFinaPipeline.
 
 Drives the plugin through its real messagebus contract using a FakeBus —
-the same path OVOS uses in production, minus the network. Equivalent
-coverage to ovoscope's ``PipelineHarness`` (which is currently broken
-upstream: ``_SinkSkill(bus=None)`` crashes on construction in
-ovoscope==0.16.0a1).
+the same path OVOS uses in production, minus the network. Fast and
+exhaustive: instantiates ``LinhaFinaPipeline`` directly so each test
+runs in milliseconds with no MiniCroft startup.
+
+For end-to-end smoke coverage that proves the plugin loads via the OPM
+entry point inside a real MiniCroft, see ``test_pipeline_ovoscope.py``.
 """
 
 import time
