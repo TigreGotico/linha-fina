@@ -25,38 +25,47 @@ def test_split_intent_label():
     assert _split_intent_label("noskill") == ("noskill", "noskill")
 
 
-def test_parallel_argmax_routes_and_matches(pipe):
-    # linha-fina's per-intent SVM needs samples from other intents in the
-    # same engine to build negatives, but with parallel-argmax routing
-    # there is no per-domain *router* minimum any more.
+def test_parallel_argmax_routes_to_correct_domain(pipe):
+    # Parallel-argmax: every per-domain engine scores the utterance and the
+    # highest-confidence match across domains wins. The intents in each
+    # domain are deliberately disjoint in vocabulary so the routing is
+    # unambiguous on the test utterances.
     pipe.register_intent(_make_register_msg(
         "media.skill:play",
-        ["play music", "put on a song", "play africa", "i want to hear something"]))
+        ["play music", "put on a song", "play africa", "i want to hear something",
+         "start the playlist", "play some tunes"]))
     pipe.register_intent(_make_register_msg(
         "media.skill:stop",
-        ["stop", "stop the music", "halt playback", "silence please"]))
+        ["stop the music", "halt playback", "pause the song", "stop the playlist",
+         "silence the tunes", "end playback"]))
     pipe.register_intent(_make_register_msg(
         "media.skill:next",
-        ["next track", "skip song", "next please", "skip this one"]))
+        ["next track", "skip song", "next track please", "skip this song",
+         "go to the next track", "skip to the next song"]))
     pipe.register_intent(_make_register_msg(
-        "home.skill:lights_on",
-        ["turn on the lights", "lights on", "switch on the lamp", "illuminate the room"]))
+        "weather.skill:forecast",
+        ["what is the weather", "weather forecast", "tell me the weather",
+         "is it raining", "weather report", "today's weather forecast"]))
     pipe.register_intent(_make_register_msg(
-        "home.skill:lights_off",
-        ["turn off the lights", "lights off", "switch off the lamp", "darken the room"]))
+        "weather.skill:temperature",
+        ["what is the temperature", "how hot is it", "current temperature",
+         "how cold is it", "tell me the temperature", "what's the outdoor temp"]))
     pipe.register_intent(_make_register_msg(
-        "home.skill:thermostat",
-        ["set temperature to twenty", "make it warmer", "make it cooler", "thermostat to high"]))
+        "weather.skill:rain",
+        ["will it rain", "rain forecast", "is rain expected",
+         "chance of rain", "rain probability", "is it going to rain today"]))
 
+    # In-domain media utterance → media.skill
     match = pipe.calc_intent(["play music"], lang="en-US")
     assert match is not None
     skill_id, _ = _split_intent_label(match.name)
     assert skill_id == "media.skill"
 
-    match2 = pipe.calc_intent(["turn on the lights"], lang="en-US")
+    # In-domain weather utterance → weather.skill
+    match2 = pipe.calc_intent(["what is the weather"], lang="en-US")
     assert match2 is not None
     skill_id2, _ = _split_intent_label(match2.name)
-    assert skill_id2 == "home.skill"
+    assert skill_id2 == "weather.skill"
 
 
 def test_detach_skill_removes_domain(pipe):
@@ -75,10 +84,21 @@ def test_detach_skill_removes_domain(pipe):
     assert not any(i.startswith("media.skill:") for i in pipe.registered_intents)
 
 
-def test_ovoscope_e2e():
-    """Optional ovoscope round-trip via the OVOS pipeline harness."""
-    ovoscope = pytest.importorskip("ovoscope")
-    # We only assert the plugin is discoverable via OPM and constructible.
-    pipe = DomainLinhaFinaPipeline(bus=FakeBus(), config={})
-    assert pipe.containers
-    pipe.shutdown()
+def test_ovoscope_harness_loads_domain_plugin():
+    """Verify the domain pipeline OPM entry point resolves inside MiniCroft."""
+    pytest.importorskip("ovoscope")
+    from ovoscope.pipeline import PipelineHarness
+
+    plugin_id = "ovos-linha-fina-domain-pipeline-plugin"
+    with PipelineHarness(pipeline=[plugin_id], lang="en-US") as h:
+        loaded = h._mc.intents.pipeline_plugins
+        assert plugin_id in loaded
+        assert isinstance(loaded[plugin_id], DomainLinhaFinaPipeline)
+        # Asserting the *live plugin* received and registered an intent via the
+        # real OVOS bus — not via a side-channel listener.
+        h._mc.bus.emit(_make_register_msg(
+            "media.skill:play",
+            ["play music", "put on a song", "play africa"]))
+        plugin = loaded[plugin_id]
+        assert "media.skill:play" in plugin.registered_intents
+        assert "media.skill" in plugin.containers[plugin.lang].domains

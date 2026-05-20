@@ -17,6 +17,12 @@ imbalance.
 from collections import defaultdict
 from typing import Dict, List, Optional
 
+try:
+    from ovos_utils.log import LOG
+except ImportError:
+    from logging import getLogger
+    LOG = getLogger("LinhaFina")
+
 from linha_fina.engine import IntentEngine, IntentMatch
 
 
@@ -135,10 +141,11 @@ class DomainIntentEngine:
             return IntentMatch(name=None, slots={}, conf=0.0)
 
         best = IntentMatch(name=None, slots={}, conf=0.0)
-        for engine in self.domains.values():
+        for name, engine in self.domains.items():
             try:
                 m = engine.calc_intent(query)
-            except Exception:
+            except Exception as e:
+                LOG.warning(f"calc_intent failed for domain {name!r}: {e}")
                 continue
             if m is None or m.name is None:
                 continue
@@ -162,10 +169,11 @@ class DomainIntentEngine:
             return [IntentMatch(name=None, slots={}, conf=0.0)]
 
         candidates: List[IntentMatch] = []
-        for engine in self.domains.values():
+        for name, engine in self.domains.items():
             try:
                 candidates.extend(engine.predict(query, top_n=top_n))
-            except Exception:
+            except Exception as e:
+                LOG.warning(f"predict failed for domain {name!r}: {e}")
                 continue
         candidates = [c for c in candidates if c is not None and c.name is not None]
         if not candidates:

@@ -14,7 +14,7 @@ overlapping vocabulary.
 
 ## OPM entry point
 
-```
+```yaml
 opm.pipeline:
   ovos-linha-fina-domain-pipeline-plugin = linha_fina.domain_opm:DomainLinhaFinaPipeline
 ```

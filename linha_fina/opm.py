@@ -102,10 +102,10 @@ class LinhaFinaPipeline(ConfidenceMatcherPipeline):
 
     def _remove_skill(self, skill_id: str) -> None:
         """Remove every intent/entity belonging to *skill_id*."""
-        remove_list = [i for i in self.registered_intents if skill_id in i]
+        skill_id_colon = skill_id + ":"
+        remove_list = [i for i in self.registered_intents if i.startswith(skill_id_colon)]
         for i in remove_list:
             self._detach_intent(i)
-        skill_id_colon = skill_id + ":"
         for en in self.registered_entities:
             if en["name"].startswith(skill_id_colon):
                 self._remove_entity(en["name"], en["lang"])
