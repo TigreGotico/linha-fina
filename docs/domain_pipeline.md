@@ -16,7 +16,7 @@ overlapping vocabulary.
 
 ```yaml
 opm.pipeline:
-  ovos-linha-fina-domain-pipeline-plugin = linha_fina.domain_opm:DomainLinhaFinaPipeline
+  ovos-linha-fina-domain-pipeline-plugin = linha_fina.opm:DomainLinhaFinaPipeline
 ```
 
 Both pipelines are shipped from the same package; pick one in your OVOS

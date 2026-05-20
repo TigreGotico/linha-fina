@@ -15,6 +15,7 @@ from ovos_utils.fakebus import FakeBus
 from ovos_utils.lang import standardize_lang_tag
 from ovos_utils.log import LOG
 
+from linha_fina.domain_engine import DomainIntentEngine
 from linha_fina.engine import IntentEngine
 
 
@@ -278,6 +279,92 @@ class LinhaFinaPipeline(ConfidenceMatcherPipeline):
         self.bus.remove('padatious:register_entity', self.register_entity)
         self.bus.remove('detach_intent', self.handle_detach_intent)
         self.bus.remove('detach_skill', self.handle_detach_skill)
+
+
+def _split_intent_label(label: str):
+    """Split ``skill_id:intent_name`` into ``(skill_id, intent_name)``."""
+    if ":" in label:
+        skill_id, intent_name = label.split(":", 1)
+        return skill_id, intent_name
+    return label, label
+
+
+class DomainLinhaFinaPipeline(LinhaFinaPipeline):
+    """Domain-partitioned LinhaFina pipeline.
+
+    Intents are partitioned by ``skill_id`` (the prefix before the ``:``
+    in the intent label) into per-skill :class:`IntentEngine` instances
+    held inside a single :class:`DomainIntentEngine` per language.
+    Inference runs every per-skill engine in parallel and returns the
+    global ``argmax`` by confidence.
+
+    Re-uses the entire bus-handling machinery from
+    :class:`LinhaFinaPipeline`; only the per-language engine factory and
+    the add/remove hooks differ.
+    """
+
+    def _make_engine(self) -> DomainIntentEngine:
+        return DomainIntentEngine()
+
+    def _add_intent(self, lang: str, name: str, samples: List[str]) -> None:
+        skill_id, _ = _split_intent_label(name)
+        engine: DomainIntentEngine = self.containers[lang]
+        engine.register_domain_intent(skill_id, name, samples)
+
+    def _add_entity(self, lang: str, name: str, samples: List[str]) -> None:
+        skill_id, _ = _split_intent_label(name)
+        engine: DomainIntentEngine = self.containers[lang]
+        engine.register_domain_entity(skill_id, name, samples)
+
+    def _remove_intent(self, intent_name: str) -> None:
+        skill_id, _ = _split_intent_label(intent_name)
+        for lang, engine in self.containers.items():
+            try:
+                engine.remove_domain_intent(skill_id, intent_name)
+            except Exception as e:
+                LOG.debug(f"remove_domain_intent({skill_id},{intent_name}): {e}")
+
+    def _remove_entity(self, name: str, lang: str) -> None:
+        # entities are scoped per-domain inside DomainIntentEngine; the
+        # underlying engines drop them with the domain on remove_domain.
+        return
+
+    def _remove_skill(self, skill_id: str) -> None:
+        for lang, engine in self.containers.items():
+            try:
+                engine.remove_domain(skill_id)
+            except Exception as e:
+                LOG.debug(f"remove_domain({skill_id}): {e}")
+        keep = [i for i in self.registered_intents
+                if _split_intent_label(i)[0] != skill_id]
+        self.registered_intents[:] = keep
+
+    def calc_intent(self, utterances, lang: str = None,
+                    message: Optional[Message] = None) -> Optional[LinhaFinaIntent]:
+        if isinstance(utterances, str):
+            utterances = [utterances]
+        utterances = [u for u in utterances if len(u.split()) < self.max_words]
+        if not utterances:
+            return None
+        lang = self._get_closest_lang(lang or self.lang)
+        if lang is None:
+            return None
+        engine: DomainIntentEngine = self.containers[lang]
+        if not engine.domains:
+            return None
+        best: Optional[LinhaFinaIntent] = None
+        for utt in utterances:
+            try:
+                m = engine.calc_intent(utt)
+            except Exception as e:
+                LOG.error(f"DomainLinhaFina calc_intent error: {e}")
+                continue
+            if m is None or m.name is None:
+                continue
+            if best is None or m.conf > best.conf:
+                best = LinhaFinaIntent(sent=utt, name=m.name,
+                                       conf=m.conf, matches=m.slots)
+        return best
 
 
 @lru_cache(maxsize=3)  # repeat calls under different conf levels wont re-run code

@@ -5,7 +5,7 @@ import pytest
 from ovos_bus_client.message import Message
 from ovos_utils.fakebus import FakeBus
 
-from linha_fina.domain_opm import DomainLinhaFinaPipeline, _split_intent_label
+from linha_fina.opm import DomainLinhaFinaPipeline, _split_intent_label
 
 
 def _make_register_msg(name: str, samples, lang="en-US"):

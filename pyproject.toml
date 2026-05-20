@@ -41,7 +41,7 @@ Homepage = "https://github.com/TigreGotico/linha-fina"
 
 [project.entry-points."opm.pipeline"]
 "ovos-linha-fina-pipeline-plugin" = "linha_fina.opm:LinhaFinaPipeline"
-"ovos-linha-fina-domain-pipeline-plugin" = "linha_fina.domain_opm:DomainLinhaFinaPipeline"
+"ovos-linha-fina-domain-pipeline-plugin" = "linha_fina.opm:DomainLinhaFinaPipeline"
 
 [tool.setuptools.dynamic]
 version = { attr = "linha_fina.version.__version__" }

@@ -14,16 +14,13 @@ into per-domain engines means the SVMs see more relevant negatives
 imbalance.
 """
 
+import logging
 from collections import defaultdict
 from typing import Dict, List, Optional
 
-try:
-    from ovos_utils.log import LOG
-except ImportError:
-    from logging import getLogger
-    LOG = getLogger("LinhaFina")
-
 from linha_fina.engine import IntentEngine, IntentMatch
+
+LOG = logging.getLogger(__name__)
 
 
 class DomainIntentEngine:
