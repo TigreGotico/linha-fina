@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.0.1a3](https://github.com/TigreGotico/linha-fina/tree/0.0.1a3) (2026-05-20)
+
+[Full Changelog](https://github.com/TigreGotico/linha-fina/compare/0.0.1a2...0.0.1a3)
+
+**Merged pull requests:**
+
+- test: extensive unit + OPM pipeline tests \(89% coverage\) [\#9](https://github.com/TigreGotico/linha-fina/pull/9) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.0.1a2](https://github.com/TigreGotico/linha-fina/tree/0.0.1a2) (2026-05-20)
 
 [Full Changelog](https://github.com/TigreGotico/linha-fina/compare/ae577f750d4d07f3cb28c6bee3d8a7886f68309b...0.0.1a2)
