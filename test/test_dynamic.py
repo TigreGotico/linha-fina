@@ -83,11 +83,10 @@ class TestDynamicClassifier:
         clf = DynamicClassifier()
         clf.remove_label("does_not_exist")
 
-    def test_train_requires_three_labels(self, caplog):
+    def test_train_requires_at_least_two_labels(self, caplog):
         clf = DynamicClassifier()
         clf.add_label("a", ["alpha"])
-        clf.add_label("b", ["beta"])
-        # Only 2 labels — train silently no-ops (logs error)
+        # Only 1 label — train silently no-ops (logs error)
         clf.train()
         # No exception, but nothing fitted
         assert clf._needs_training is True
