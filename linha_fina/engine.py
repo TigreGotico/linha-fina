@@ -1,6 +1,11 @@
 import dataclasses
+import re
 from collections import defaultdict
 from typing import List, Optional, Dict
+
+from ovos_utils.bracket_expansion import expand_template
+
+_WS_RE = re.compile(r"\s+")
 
 from linha_fina.dynamic import DynamicClassifier
 from linha_fina.keywords import KeywordFeatures
@@ -24,6 +29,19 @@ class IntentEngine:
                         samples: List[str],
                         entity_samples: Optional[Dict[str, List[str]]] = None):
         samples = samples or []
+        # Expand OVOS-style alternatives "(a|b)" and optionals "[opt]"
+        # via ovos_utils.bracket_expansion. {slot} placeholders are left
+        # untouched so they remain available as templates.
+        expanded: List[str] = []
+        seen = set()
+        for s in samples:
+            variants = expand_template(s) if ("(" in s or "[" in s) else [s]
+            for v in variants:
+                v = _WS_RE.sub(" ", v).strip()
+                if v and v not in seen:
+                    seen.add(v)
+                    expanded.append(v)
+        samples = expanded
         templates = [s for s in samples if "{" in s and "}" in s]
         entity_samples = entity_samples or {}
         extra_samples = []  # generated from entity + template combos
