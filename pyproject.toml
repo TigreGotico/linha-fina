@@ -25,6 +25,17 @@ dependencies = [
 [project.optional-dependencies]
 test = ["pytest", "pytest-cov"]
 
+[tool.coverage.run]
+source = ["linha_fina"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+]
+
 [project.urls]
 Homepage = "https://github.com/TigreGotico/linha-fina"
 
