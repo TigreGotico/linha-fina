@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "linha-fina"
+dynamic = ["version"]
+description = "OVOS pipeline plugin using LinhaFina intent matching"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+authors = [{ name = "JarbasAI", email = "jarbasai@mailfence.com" }]
+requires-python = ">=3.10"
+dependencies = [
+    "scikit-learn",
+    "joblib",
+    "simplematch",
+    "rapidfuzz",
+    "ovos-plugin-manager",
+    "ovos-bus-client",
+    "ovos-config",
+    "ovos-utils",
+    "langcodes",
+]
+
+[project.optional-dependencies]
+test = ["pytest", "pytest-cov", "ovoscope>=0.17.1a1"]
+
+[tool.coverage.run]
+source = ["linha_fina"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+]
+
+[project.urls]
+Homepage = "https://github.com/TigreGotico/linha-fina"
+
+[project.entry-points."opm.pipeline"]
+"ovos-linha-fina-pipeline-plugin" = "linha_fina.opm:LinhaFinaPipeline"
+"ovos-linha-fina-domain-pipeline-plugin" = "linha_fina.opm:DomainLinhaFinaPipeline"
+
+[tool.setuptools.dynamic]
+version = { attr = "linha_fina.version.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["linha_fina*"]
