@@ -24,6 +24,7 @@ dependencies = [
 
 [project.optional-dependencies]
 test = ["pytest", "pytest-cov", "ovoscope>=0.17.1a1"]
+benchmark = ["padaos", "padatious", "fann2==1.0.7", "nebulento", "datasets"]
 
 [tool.coverage.run]
 source = ["linha_fina"]
