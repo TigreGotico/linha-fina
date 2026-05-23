@@ -20,6 +20,7 @@ dependencies = [
     "ovos-config",
     "ovos-utils",
     "langcodes",
+    "ovos-spec-tools",
 ]
 
 [project.optional-dependencies]
