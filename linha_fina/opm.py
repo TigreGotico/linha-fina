@@ -4,15 +4,14 @@ from functools import lru_cache
 from os.path import isfile
 from typing import Optional, Dict, List, Union
 
-from langcodes import closest_match
 from ovos_bus_client.client import MessageBusClient
 from ovos_bus_client.message import Message
 from ovos_bus_client.session import SessionManager, Session
 from ovos_config.config import Configuration
 from ovos_plugin_manager.templates.pipeline import ConfidenceMatcherPipeline, IntentHandlerMatch
+from ovos_spec_tools import closest_lang, standardize_lang
 from ovos_utils import flatten_list
 from ovos_utils.fakebus import FakeBus
-from ovos_utils.lang import standardize_lang_tag
 from ovos_utils.log import LOG
 
 from linha_fina.domain_engine import DomainIntentEngine
@@ -57,11 +56,11 @@ class LinhaFinaPipeline(ConfidenceMatcherPipeline):
         super().__init__(config=config or {}, bus=bus)
 
         core_config = Configuration()
-        self.lang = standardize_lang_tag(core_config.get("lang", "en-US"))
+        self.lang = standardize_lang(core_config.get("lang", "en-US"))
         langs = core_config.get('secondary_langs') or []
         if self.lang not in langs:
             langs.append(self.lang)
-        langs = [standardize_lang_tag(l) for l in langs]
+        langs = [standardize_lang(l) for l in langs]
         self.conf_high = self.config.get("conf_high") or 0.8
         self.conf_med = self.config.get("conf_med") or 0.6
         self.conf_low = self.config.get("conf_low") or 0.4
@@ -128,7 +127,7 @@ class LinhaFinaPipeline(ConfidenceMatcherPipeline):
         LOG.debug(f'LinhaFina Matching confidence > {limit}')
         # call flatten in case someone is sending the old style list of tuples
         utterances = flatten_list(utterances)
-        lang = standardize_lang_tag(lang or self.lang)
+        lang = standardize_lang(lang or self.lang)
         lf_intent = self.calc_intent(utterances, lang, message)
         if lf_intent is not None and lf_intent.conf > limit:
             skill_id = lf_intent.name.split(':')[0]
@@ -210,7 +209,7 @@ class LinhaFinaPipeline(ConfidenceMatcherPipeline):
     def register_intent(self, message):
         """Messagebus handler for registering intents."""
         lang = message.data.get('lang', self.lang)
-        lang = standardize_lang_tag(lang)
+        lang = standardize_lang(lang)
         if lang in self.containers:
             name, samples = self._extract_samples(message, 'intent')
             if name is None:
@@ -221,7 +220,7 @@ class LinhaFinaPipeline(ConfidenceMatcherPipeline):
     def register_entity(self, message):
         """Messagebus handler for registering entities."""
         lang = message.data.get('lang', self.lang)
-        lang = standardize_lang_tag(lang)
+        lang = standardize_lang(lang)
         if lang in self.containers:
             name, samples = self._extract_samples(message, 'entity')
             if name is None:
@@ -264,14 +263,7 @@ class LinhaFinaPipeline(ConfidenceMatcherPipeline):
 
     def _get_closest_lang(self, lang: str) -> Optional[str]:
         if self.containers:
-            lang = standardize_lang_tag(lang)
-            closest, score = closest_match(lang, list(self.containers.keys()))
-            # https://langcodes-hickford.readthedocs.io/en/sphinx/index.html#distance-values
-            # 0 -> These codes represent the same language, possibly after filling in values and normalizing.
-            # 1- 3 -> These codes indicate a minor regional difference.
-            # 4 - 10 -> These codes indicate a significant but unproblematic regional difference.
-            if score < 10:
-                return closest
+            return closest_lang(lang, list(self.containers.keys()))
         return None
 
     def shutdown(self):
