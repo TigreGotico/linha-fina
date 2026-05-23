@@ -76,7 +76,7 @@ def test_detach_skill_removes_domain(pipe):
     ]:
         pipe.register_intent(_make_register_msg(name, samples))
 
-    engine = pipe.containers["en-US"]
+    engine = pipe.containers[pipe.lang]
     assert "media.skill" in engine.domains
 
     pipe.handle_detach_skill(Message("detach_skill", {"skill_id": "media.skill"}))
