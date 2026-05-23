@@ -158,13 +158,6 @@ def _entity_samples_for(bundle, intent_data):
             if slot in bundle.entities}
 
 
-def _domain_of(bundle):
-    """Return ``{intent_id: domain}`` for the bundle."""
-    return {intent: dom
-            for dom, intents in bundle.domains.items()
-            for intent in intents}
-
-
 # ── baseline engine runners ────────────────────────────────────────────────
 
 def run_padaos(bundle, cases):
@@ -222,10 +215,15 @@ def run_nebulento(bundle, cases, strategy_name, threshold=0.5):
     from nebulento.fuzz import MatchStrategy
     strategy = getattr(MatchStrategy, strategy_name)
     c = IntentContainer(fuzzy_strategy=strategy)
-    for entity_name, samples in bundle.entities.items():
-        c.add_entity(entity_name, samples)
-    for name, data in bundle.intents.items():
-        c.add_intent(name, data["train"])
+    try:
+        for entity_name, samples in bundle.entities.items():
+            c.add_entity(entity_name, samples)
+        for name, data in bundle.intents.items():
+            c.add_intent(name, data["train"])
+    except Exception as e:
+        print(f"[SKIP] nebulento  {strategy_name.lower().replace('_', '-')} "
+              f"— registration failed: {e}")
+        return None
 
     results, latencies = [], []
     for utt, _ in cases:
@@ -273,11 +271,10 @@ def run_linha_fina_domain(bundle, cases, threshold=0.5):
     """``DomainIntentEngine`` — parallel-argmax, intents grouped by domain."""
     from linha_fina.domain_engine import DomainIntentEngine
 
-    intent_domain = _domain_of(bundle)
     engine = DomainIntentEngine()
     t0 = time.perf_counter()
     for name, data in bundle.intents.items():
-        engine.register_domain_intent(intent_domain[name], name, data["train"],
+        engine.register_domain_intent(data["domain"], name, data["train"],
                                       entity_samples=_entity_samples_for(bundle, data))
     train_ms = (time.perf_counter() - t0) * 1000
 
@@ -300,11 +297,10 @@ def run_linha_fina_hierarchical(bundle, cases, threshold=0.5,
     """``HierarchicalIntentEngine`` — two-stage domain-routed matching."""
     from linha_fina.hierarchical_engine import HierarchicalIntentEngine
 
-    intent_domain = _domain_of(bundle)
     engine = HierarchicalIntentEngine(domain_threshold=domain_threshold)
     t0 = time.perf_counter()
     for name, data in bundle.intents.items():
-        engine.register_domain_intent(intent_domain[name], name, data["train"],
+        engine.register_domain_intent(data["domain"], name, data["train"],
                                       entity_samples=_entity_samples_for(bundle, data))
     train_ms = (time.perf_counter() - t0) * 1000
 
@@ -371,9 +367,11 @@ def run_dataset(name):
     m, lat, mean_lat, tr = run_padatious(bundle, cases, threshold=0.5)
     rows.append(("padatious  neural  threshold=0.5", m, lat, mean_lat, tr))
 
-    m, lat, mean_lat, tr = run_nebulento(
+    neb = run_nebulento(
         bundle, cases, strategy_name="DAMERAU_LEVENSHTEIN_SIMILARITY", threshold=0.5)
-    rows.append(("nebulento  damerau-levenshtein", m, lat, mean_lat, tr))
+    if neb is not None:
+        m, lat, mean_lat, tr = neb
+        rows.append(("nebulento  damerau-levenshtein", m, lat, mean_lat, tr))
 
     # subject — this repo's three engines
     m, lat, mean_lat, tr = run_linha_fina(bundle, cases, threshold=0.5)
