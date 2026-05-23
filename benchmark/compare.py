@@ -40,6 +40,59 @@ logging.disable(logging.CRITICAL)
 _CI_MODE = "--ci" in sys.argv
 
 
+# ── calibration helpers ────────────────────────────────────────────────────
+
+def fbeta(precision, recall, beta=0.5):
+    """F_β score. β<1 weights precision over recall — appropriate for voice
+    assistants where a false positive (wrong skill fires) is unrecoverable
+    while a false negative falls through to fallback handlers (LLM, etc.).
+    """
+    b2 = beta * beta
+    denom = b2 * precision + recall
+    return ((1 + b2) * precision * recall / denom) if denom else 0.0
+
+
+def recall_at_precision(results_no_thresh, cases, p_floor=0.99, step=0.01):
+    """Sweep the threshold and return the max recall achievable while
+    keeping precision >= ``p_floor`` (and the threshold that gets there).
+    """
+    best_r, best_t = 0.0, None
+    t = 0.0
+    while t <= 1.0 + 1e-9:
+        thresholded = [
+            (lbl if c >= t else None, c) for (lbl, c) in results_no_thresh
+        ]
+        m = compute_metrics(thresholded, cases)
+        if m["precision"] >= p_floor and m["recall"] > best_r:
+            best_r, best_t = m["recall"], round(t, 4)
+        t += step
+    return best_r, best_t
+
+
+def calibrate_threshold(results_no_thresh, cases, step=0.01, metric="f0.5"):
+    """Sweep threshold and return (best_threshold, best_metric_value, best_metrics).
+
+    ``metric`` selects the scalar to maximise:
+      - ``"f1"``   — standard F1.
+      - ``"f0.5"`` — F_β=0.5 (precision-weighted; OVOS default).
+    """
+    def score(m):
+        return m["f1"] if metric == "f1" else fbeta(m["precision"], m["recall"], 0.5)
+
+    best = (0.0, -1.0, None)
+    t = 0.0
+    while t <= 1.0 + 1e-9:
+        thresholded = [
+            (lbl if c >= t else None, c) for (lbl, c) in results_no_thresh
+        ]
+        m = compute_metrics(thresholded, cases)
+        s = score(m)
+        if s > best[1]:
+            best = (round(t, 4), s, m)
+        t += step
+    return best
+
+
 # ── shared helpers ─────────────────────────────────────────────────────────
 
 def all_cases(bundle):
@@ -181,7 +234,7 @@ def run_padaos(bundle, cases):
 
     m = compute_metrics(results, cases)
     print_report("padaos  (regex, no fuzz)", m, latencies, bundle.intents, train_ms)
-    return m, statistics.median(latencies), statistics.mean(latencies), train_ms
+    return m, statistics.median(latencies), statistics.mean(latencies), train_ms, None
 
 
 def run_padatious(bundle, cases, threshold=0.5):
@@ -196,18 +249,18 @@ def run_padatious(bundle, cases, threshold=0.5):
         c.train(single_thread=True, debug=False)
         train_ms = (time.perf_counter() - t0) * 1000
 
-        results, latencies = [], []
+        raw, latencies = [], []
         for utt, _ in cases:
             t0 = time.perf_counter()
             r  = c.calc_intent(normalize_utterance(utt))
             latencies.append((time.perf_counter() - t0) * 1000)
-            predicted = r.name if (r and r.conf >= threshold) else None
-            results.append((predicted, r.conf if r else 0.0))
+            raw.append((r.name if r else None, r.conf if r else 0.0))
 
+    results = [(lbl if c >= threshold else None, c) for (lbl, c) in raw]
     m = compute_metrics(results, cases)
     print_report(f"padatious  (neural, threshold={threshold})", m, latencies,
                  bundle.intents, train_ms)
-    return m, statistics.median(latencies), statistics.mean(latencies), train_ms
+    return m, statistics.median(latencies), statistics.mean(latencies), train_ms, raw
 
 
 def run_nebulento(bundle, cases, strategy_name, threshold=0.5):
@@ -225,18 +278,18 @@ def run_nebulento(bundle, cases, strategy_name, threshold=0.5):
               f"— registration failed: {e}")
         return None
 
-    results, latencies = [], []
+    raw, latencies = [], []
     for utt, _ in cases:
         t0 = time.perf_counter()
         r  = c.calc_intent(utt)
         latencies.append((time.perf_counter() - t0) * 1000)
-        predicted = r.get("name") if (r and r.get("conf", 0) >= threshold) else None
-        results.append((predicted, r.get("conf", 0.0) if r else 0.0))
+        raw.append((r.get("name") if r else None, r.get("conf", 0.0) if r else 0.0))
 
+    results = [(lbl if c >= threshold else None, c) for (lbl, c) in raw]
     m = compute_metrics(results, cases)
     label = f"nebulento  {strategy_name.lower().replace('_', '-')}"
     print_report(label, m, latencies, bundle.intents)
-    return m, statistics.median(latencies), statistics.mean(latencies), None
+    return m, statistics.median(latencies), statistics.mean(latencies), None, raw
 
 
 # ── linha-fina engine runners ──────────────────────────────────────────────
@@ -253,18 +306,18 @@ def run_linha_fina(bundle, cases, threshold=0.5):
     engine.train()
     train_ms = (time.perf_counter() - t0) * 1000
 
-    results, latencies = [], []
+    raw, latencies = [], []
     for utt, _ in cases:
         t0 = time.perf_counter()
         r  = engine.calc_intent(utt)
         latencies.append((time.perf_counter() - t0) * 1000)
-        predicted = r.name if (r and r.name and r.conf >= threshold) else None
-        results.append((predicted, r.conf if r else 0.0))
+        raw.append((r.name if (r and r.name) else None, r.conf if r else 0.0))
 
+    results = [(lbl if c >= threshold else None, c) for (lbl, c) in raw]
     m = compute_metrics(results, cases)
     print_report(f"linha-fina  flat  threshold={threshold}", m, latencies,
                  bundle.intents, train_ms)
-    return m, statistics.median(latencies), statistics.mean(latencies), train_ms
+    return m, statistics.median(latencies), statistics.mean(latencies), train_ms, raw
 
 
 def run_linha_fina_domain(bundle, cases, threshold=0.5):
@@ -278,18 +331,18 @@ def run_linha_fina_domain(bundle, cases, threshold=0.5):
                                       entity_samples=_entity_samples_for(bundle, data))
     train_ms = (time.perf_counter() - t0) * 1000
 
-    results, latencies = [], []
+    raw, latencies = [], []
     for utt, _ in cases:
         t0 = time.perf_counter()
         r  = engine.calc_intent(utt)
         latencies.append((time.perf_counter() - t0) * 1000)
-        predicted = r.name if (r and r.name and r.conf >= threshold) else None
-        results.append((predicted, r.conf if r else 0.0))
+        raw.append((r.name if (r and r.name) else None, r.conf if r else 0.0))
 
+    results = [(lbl if c >= threshold else None, c) for (lbl, c) in raw]
     m = compute_metrics(results, cases)
     print_report(f"linha-fina  domain  threshold={threshold}", m, latencies,
                  bundle.intents, train_ms)
-    return m, statistics.median(latencies), statistics.mean(latencies), train_ms
+    return m, statistics.median(latencies), statistics.mean(latencies), train_ms, raw
 
 
 def run_linha_fina_hierarchical(bundle, cases, threshold=0.5,
@@ -304,20 +357,20 @@ def run_linha_fina_hierarchical(bundle, cases, threshold=0.5,
                                       entity_samples=_entity_samples_for(bundle, data))
     train_ms = (time.perf_counter() - t0) * 1000
 
-    results, latencies = [], []
+    raw, latencies = [], []
     for utt, _ in cases:
         t0 = time.perf_counter()
         r  = engine.calc_intent(utt)
         latencies.append((time.perf_counter() - t0) * 1000)
-        predicted = r.name if (r and r.name and r.conf >= threshold) else None
-        results.append((predicted, r.conf if r else 0.0))
+        raw.append((r.name if (r and r.name) else None, r.conf if r else 0.0))
 
+    results = [(lbl if c >= threshold else None, c) for (lbl, c) in raw]
     m = compute_metrics(results, cases)
     print_report(
         f"linha-fina  hierarchical  threshold={threshold}  "
         f"domain_threshold={domain_threshold}",
         m, latencies, bundle.intents, train_ms)
-    return m, statistics.median(latencies), statistics.mean(latencies), train_ms
+    return m, statistics.median(latencies), statistics.mean(latencies), train_ms, raw
 
 
 # ── summary table ──────────────────────────────────────────────────────────
@@ -359,32 +412,82 @@ def run_dataset(name):
     print("Splits  : " + ", ".join(f"{k}={len(v)}" for k, v in bundle.splits.items()))
 
     rows = []
+    cal_rows = []
 
     # fixed external baselines
-    m, lat, mean_lat, tr = run_padaos(bundle, cases)
+    m, lat, mean_lat, tr, raw = run_padaos(bundle, cases)
     rows.append(("padaos  (regex)", m, lat, mean_lat, tr))
+    # padaos has no conf knob — skip calibration
 
-    m, lat, mean_lat, tr = run_padatious(bundle, cases, threshold=0.5)
+    m, lat, mean_lat, tr, raw = run_padatious(bundle, cases, threshold=0.5)
     rows.append(("padatious  neural  threshold=0.5", m, lat, mean_lat, tr))
+    cal_rows.append(_calibrate_row("padatious", raw, cases, 0.5, m))
 
     neb = run_nebulento(
         bundle, cases, strategy_name="DAMERAU_LEVENSHTEIN_SIMILARITY", threshold=0.5)
     if neb is not None:
-        m, lat, mean_lat, tr = neb
+        m, lat, mean_lat, tr, raw = neb
         rows.append(("nebulento  damerau-levenshtein", m, lat, mean_lat, tr))
+        cal_rows.append(_calibrate_row("nebulento", raw, cases, 0.5, m))
 
     # subject — this repo's three engines
-    m, lat, mean_lat, tr = run_linha_fina(bundle, cases, threshold=0.5)
+    m, lat, mean_lat, tr, raw = run_linha_fina(bundle, cases, threshold=0.5)
     rows.append(("linha-fina  flat", m, lat, mean_lat, tr))
+    cal_rows.append(_calibrate_row("linha-fina flat", raw, cases, 0.5, m))
 
-    m, lat, mean_lat, tr = run_linha_fina_domain(bundle, cases, threshold=0.5)
+    m, lat, mean_lat, tr, raw = run_linha_fina_domain(bundle, cases, threshold=0.5)
     rows.append(("linha-fina  domain", m, lat, mean_lat, tr))
+    cal_rows.append(_calibrate_row("linha-fina domain", raw, cases, 0.5, m))
 
-    m, lat, mean_lat, tr = run_linha_fina_hierarchical(
+    m, lat, mean_lat, tr, raw = run_linha_fina_hierarchical(
         bundle, cases, threshold=0.5, domain_threshold=0.0)
     rows.append(("linha-fina  hierarchical", m, lat, mean_lat, tr))
+    cal_rows.append(_calibrate_row("linha-fina hierarchical", raw, cases, 0.5, m))
 
     summary(f"{name}  —  {bundle.repo}", rows)
+    _print_calibration_table(cal_rows)
+
+
+def _calibrate_row(label, raw, cases, default_thr, default_metrics):
+    """Compute the calibration row for one engine.
+
+    Returns a tuple holding the default and F_0.5-optimal thresholds plus the
+    metrics that matter to a voice assistant: F1, F_0.5 (precision-weighted),
+    FP count, and Rec@P>=0.99 (the recall achievable while keeping at most 1%
+    false positives — the operating point a production OVOS install would use).
+    """
+    df1 = default_metrics["f1"]
+    dfp = default_metrics["fp"]
+    df05 = fbeta(default_metrics["precision"], default_metrics["recall"], 0.5)
+    opt_thr, _, opt_metrics = calibrate_threshold(raw, cases, step=0.01,
+                                                  metric="f0.5")
+    of1 = opt_metrics["f1"]
+    ofp = opt_metrics["fp"]
+    of05 = fbeta(opt_metrics["precision"], opt_metrics["recall"], 0.5)
+    rec_at_p, rec_thr = recall_at_precision(raw, cases, p_floor=0.99, step=0.01)
+    return (label, default_thr, df1, df05, dfp,
+            opt_thr, of1, of05, ofp, rec_at_p, rec_thr)
+
+
+def _print_calibration_table(rows):
+    print(f"\n{'─'*108}")
+    print("  Per-engine threshold calibration  (sweep 0..1 step 0.01, max F_0.5)")
+    print(f"  {'Engine':<28} {'def_thr':>7} {'def_F1':>7} {'defF.5':>7} {'def_FP':>6}"
+          f"  {'opt_thr':>7} {'opt_F1':>7} {'optF.5':>7} {'opt_FP':>6}"
+          f"  {'R@P99':>6} {'thr':>5}")
+    print(f"{'─'*108}")
+    for r in rows:
+        (label, dthr, df1, df05, dfp,
+         othr, of1, of05, ofp, rec_at_p, rec_thr) = r
+        rec_t = f"{rec_thr:.2f}" if rec_thr is not None else "--"
+        print(f"  {label:<28} {dthr:>7.2f} {df1:>7.3f} {df05:>7.3f} {dfp:>6d}"
+              f"  {othr:>7.2f} {of1:>7.3f} {of05:>7.3f} {ofp:>6d}"
+              f"  {rec_at_p:>6.1%} {rec_t:>5}")
+    print(f"{'─'*108}")
+    print("  F_0.5 (β=0.5) weights precision 2x recall — the right summary metric")
+    print("  for OVOS, where a wrong intent is unrecoverable but a missed intent")
+    print("  falls through to fallback handlers. R@P99 = max recall achievable")
+    print("  with the threshold tuned to keep precision >= 99%.")
 
 
 if __name__ == "__main__":
